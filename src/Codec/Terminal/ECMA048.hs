@@ -11,8 +11,6 @@ import Control.Monad
 import Data.Attoparsec as AP
 import Data.ByteString
 
-inRange lo hi c = lo <= c && c < hi
-
 c0 = decodeC0 <$> satisfy isC0 <?> "C0"
 
 c1_7bit = esc >> fe <?> "C1"
