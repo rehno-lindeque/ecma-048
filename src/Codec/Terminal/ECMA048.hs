@@ -11,13 +11,17 @@ import Control.Monad
 import Data.Attoparsec as AP
 import Data.ByteString
 
+c0 :: Parser C0
 c0 = decodeC0 <$> satisfy isC0 <?> "C0"
 
+c1_7bit :: Parser C1
 c1_7bit = esc >> fe <?> "C1"
     where fe = decodeC1 0x40 <$> satisfy (isC1 0x40) <?> "FE"
 
+c1_8bit :: Parser C1
 c1_8bit = decodeC1 0x80 <$> satisfy (isC1 0x80) <?> "C1"
 
+c1_8bit_announced :: Parser C1
 c1_8bit_announced = c1_8bit <|> (announcer >> c1_7bit)
     where 
         -- not using 'string' because it returns 'Partial' until there are 3
@@ -25,8 +29,10 @@ c1_8bit_announced = c1_8bit <|> (announcer >> c1_7bit)
         -- no match.
         announcer = mapM_ word8 [0x1b, 0x20, 0x46] <?> "7-bit announcer"
 
+csi :: Parser C1 -> Parser C1
 csi c1  = do CSI <- c1; return CSI
 
+controlSequence :: Parser C1 -> Parser (Either ByteString ControlFunction, ByteString)
 controlSequence c1 = do
     csi c1
     params          <- AP.takeWhile isParam
@@ -39,8 +45,10 @@ controlSequence c1 = do
         Nothing   -> return (Left cmd, params)
         Just func -> return (Right func, params)
 
+icf :: Parser ICF
 icf = esc >> decodeICF <$> satisfy isICF <?> "independent control function"
 
+startControlString :: Parser C1 -> Parser C1
 startControlString c1 = do
         c <- c1
         case c of
@@ -52,8 +60,8 @@ startControlString c1 = do
             _     -> mzero
     <?> "Start of control string"
 
+stringTerminator :: Parser C1 -> Parser C1
 stringTerminator c1 = do ST <- c1; return ST <?> "ST"
-
 
 data Control
     = C0 !C0
@@ -65,6 +73,7 @@ data Control
     | EndCS
     deriving (Eq, Ord, Show, Read)
 
+control :: Parser C1 -> Parser Control
 control c1 = choice
     [ do
         (cf, params) <- controlSequence c1
